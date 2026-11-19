@@ -1,0 +1,363 @@
+{
+  "entities": {
+    "NewsArticle": {
+      "title": "NewsArticle",
+      "description": "Published, scheduled, or draft Jammu & Kashmir digital news article",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique article ID" },
+        "title": { "type": "string", "description": "Article headline" },
+        "category": { "type": "string", "description": "Category name" },
+        "district": { "type": "string", "description": "J&K district or region" },
+        "language": { "type": "string", "enum": ["hi", "en"], "description": "Edition language" },
+        "author": { "type": "string", "description": "Reporter or correspondent byline" },
+        "photoCaption": { "type": "string", "description": "Cover photo caption or credit" },
+        "content": { "type": "string", "description": "Article body text" },
+        "imageUrl": { "type": "string", "description": "Cover image path, URL, or compressed JPEG data URL" },
+        "publishedAt": { "type": "string", "format": "date-time", "description": "ISO publication timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Optional ISO last edited timestamp" },
+        "scheduledAt": { "type": "string", "format": "date-time", "description": "Optional scheduled publish ISO timestamp" },
+        "isFeatured": { "type": "boolean", "description": "Whether displayed in homepage hero slider" },
+        "isPublished": { "type": "boolean", "description": "Whether publicly visible" },
+        "linkUrl": { "type": "string", "description": "Optional custom destination URL" }
+      },
+      "required": ["id", "title", "category", "content", "imageUrl", "publishedAt", "isFeatured"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "News category configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "order": { "type": "number" }
+      },
+      "required": ["id", "name"]
+    },
+    "NewspaperEdition": {
+      "title": "NewspaperEdition",
+      "description": "Daily multi-page broadsheet PDF E-Paper metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "description": "YYYY-MM-DD" },
+        "title": { "type": "string" },
+        "pdfUrl": { "type": "string", "description": "Static URL, external HTTPS URL, or firestore://<id>" },
+        "pageCount": { "type": "number" },
+        "fileSize": { "type": "number" }
+      },
+      "required": ["id", "date", "title", "pdfUrl"]
+    },
+    "PdfChunk": {
+      "title": "PdfChunk",
+      "description": "Base64-encoded chunk of an uploaded E-Paper PDF kept safely under 1MB",
+      "type": "object",
+      "properties": {
+        "index": { "type": "number" },
+        "totalChunks": { "type": "number" },
+        "data": { "type": "string" }
+      },
+      "required": ["index", "totalChunks", "data"]
+    },
+    "BreakingNewsItem": {
+      "title": "BreakingNewsItem",
+      "description": "Homepage breaking news ticker item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "enabled": { "type": "boolean" }
+      },
+      "required": ["id", "text", "enabled"]
+    },
+    "VideoBulletin": {
+      "title": "VideoBulletin",
+      "description": "YouTube video bulletin item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "youtubeId": { "type": "string" },
+        "publishedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "category", "youtubeId", "publishedAt"]
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Global site configuration",
+      "type": "object",
+      "properties": {
+        "siteName": { "type": "string" },
+        "tagline": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "contactEmail": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "aboutText": { "type": "string" },
+        "tickerEnabled": { "type": "boolean" }
+      },
+      "required": ["siteName", "tagline", "logoUrl", "contactEmail", "contactPhone", "aboutText", "tickerEnabled"]
+    },
+    "SocialLink": {
+      "title": "SocialLink",
+      "description": "Official footer social media link",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "platform": { "type": "string" },
+        "url": { "type": "string" },
+        "enabled": { "type": "boolean" }
+      },
+      "required": ["id", "platform", "url", "enabled"]
+    },
+    "ArticleComment": {
+      "title": "ArticleComment",
+      "description": "Reader comment on a news article",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "newsId": { "type": "string" },
+        "author": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["approved", "pending", "hidden"] },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "newsId", "author", "content", "createdAt", "status"]
+    },
+    "ArticleView": {
+      "title": "ArticleView",
+      "description": "Public read counter for trending / Most Read in J&K",
+      "type": "object",
+      "properties": {
+        "newsId": { "type": "string" },
+        "count": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["newsId", "count", "updatedAt"]
+    },
+    "NewsTip": {
+      "title": "NewsTip",
+      "description": "Citizen-submitted breaking news tip queued for newsroom review",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reporterName": { "type": "string" },
+        "contact": { "type": "string" },
+        "district": { "type": "string" },
+        "headline": { "type": "string" },
+        "details": { "type": "string" },
+        "photoDataUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "reviewed", "converted"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "reviewedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "reporterName", "contact", "district", "headline", "details", "status", "createdAt"]
+    },
+    "Subscriber": {
+      "title": "Subscriber",
+      "description": "Newsletter email subscriber collected from footer form",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "subscribedAt": { "type": "string", "format": "date-time" },
+        "source": { "type": "string" }
+      },
+      "required": ["id", "email", "subscribedAt"]
+    },
+    "SponsorAd": {
+      "title": "SponsorAd",
+      "description": "Local sponsor or advertisement banner slot",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "targetUrl": { "type": "string" },
+        "placement": { "type": "string", "enum": ["home", "article", "epaper"] },
+        "enabled": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "imageUrl", "targetUrl", "placement", "enabled", "createdAt"]
+    },
+    "ContactInquiry": {
+      "title": "ContactInquiry",
+      "description": "Reader contact or advertisement inquiry submitted on /contact",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "contact": { "type": "string" },
+        "subject": { "type": "string", "enum": ["Editorial / Correction", "Advertisement", "General"] },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["new", "resolved"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "resolvedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "contact", "subject", "message", "status", "createdAt"]
+    },
+    "PushToken": {
+      "title": "PushToken",
+      "description": "Registered FCM / Web Push device notification token and alert preferences",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "token": { "type": "string" },
+        "region": { "type": "string" },
+        "epaperEnabled": { "type": "boolean" },
+        "breakingEnabled": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "token", "region", "epaperEnabled", "breakingEnabled", "createdAt", "updatedAt"]
+    },
+    "EditorInvite": {
+      "title": "EditorInvite",
+      "description": "Authorized correspondent or editor granted CMS access by Google email",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["editor", "admin"] },
+        "addedBy": { "type": "string" },
+        "addedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "name", "role", "addedBy", "addedAt"]
+    },
+    "PrivateUserProfile": {
+      "title": "PrivateUserProfile",
+      "description": "Owner-private reader profile with contact PII",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "contact": { "type": "string" },
+        "email": { "type": "string" },
+        "photo": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name"]
+    },
+    "UserBookmark": {
+      "title": "UserBookmark",
+      "description": "Saved news article bookmark owned by user",
+      "type": "object",
+      "properties": {
+        "newsId": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "publishedAt": { "type": "string" },
+        "savedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["newsId", "title", "category", "imageUrl", "publishedAt", "savedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Authorized CMS administrator entry",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin"] },
+        "addedAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "ActivityItem": {
+      "title": "ActivityItem",
+      "description": "CMS admin audit trail event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "action": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "action", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/news/{newsId}": {
+      "schema": { "$ref": "#/entities/NewsArticle" },
+      "description": "News articles collection"
+    },
+    "/articleViews/{newsId}": {
+      "schema": { "$ref": "#/entities/ArticleView" },
+      "description": "Per-article read count metrics"
+    },
+    "/newsTips/{tipId}": {
+      "schema": { "$ref": "#/entities/NewsTip" },
+      "description": "Citizen-submitted news tips queue (admin-only reads)"
+    },
+    "/subscribers/{subId}": {
+      "schema": { "$ref": "#/entities/Subscriber" },
+      "description": "Newsletter email subscribers (admin-only reads)"
+    },
+    "/ads/{adId}": {
+      "schema": { "$ref": "#/entities/SponsorAd" },
+      "description": "Sponsor advertisement banners"
+    },
+    "/inquiries/{inquiryId}": {
+      "schema": { "$ref": "#/entities/ContactInquiry" },
+      "description": "Contact and advertising inquiries (admin-only reads)"
+    },
+    "/pushTokens/{tokenId}": {
+      "schema": { "$ref": "#/entities/PushToken" },
+      "description": "Registered FCM / Web Push device notification tokens (admin-only reads)"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "News categories collection"
+    },
+    "/newspapers/{paperId}": {
+      "schema": { "$ref": "#/entities/NewspaperEdition" },
+      "description": "Daily E-Paper archive metadata"
+    },
+    "/newspapers/{paperId}/chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/PdfChunk" },
+      "description": "Chunked PDF binary payloads stored safely under 1MB per document"
+    },
+    "/breakingNews/{itemId}": {
+      "schema": { "$ref": "#/entities/BreakingNewsItem" },
+      "description": "Breaking news ticker headlines"
+    },
+    "/videos/{videoId}": {
+      "schema": { "$ref": "#/entities/VideoBulletin" },
+      "description": "YouTube video bulletins"
+    },
+    "/siteConfig/general": {
+      "schema": { "$ref": "#/entities/SiteSettings" },
+      "description": "Singleton site settings document"
+    },
+    "/socialLinks/{linkId}": {
+      "schema": { "$ref": "#/entities/SocialLink" },
+      "description": "Official footer social links"
+    },
+    "/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/ArticleComment" },
+      "description": "Reader article comments and moderation status"
+    },
+    "/editorInvites/{inviteId}": {
+      "schema": { "$ref": "#/entities/EditorInvite" },
+      "description": "Correspondent and editor access invites keyed by lowercase Google email"
+    },
+    "/users/{userId}/private/profile": {
+      "schema": { "$ref": "#/entities/PrivateUserProfile" },
+      "description": "Owner-private reader profile containing contact phone and email"
+    },
+    "/users/{userId}/bookmarks/{newsId}": {
+      "schema": { "$ref": "#/entities/UserBookmark" },
+      "description": "Reader saved bookmarks"
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Authorized CMS administrators"
+    },
+    "/adminActivity/{activityId}": {
+      "schema": { "$ref": "#/entities/ActivityItem" },
+      "description": "Admin CMS activity log"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Amrit Prasaran - J&K News",
+  "description": "Premium Hindi-first digital news platform for Jammu & Kashmir.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

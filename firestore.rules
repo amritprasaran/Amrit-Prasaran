@@ -1,0 +1,465 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isBootstrapAdmin() {
+      return isAuthenticated() &&
+        request.auth.token.email == 'amritprasaran@gmail.com' &&
+        request.auth.token.email_verified == true;
+    }
+
+    function isInvitedEditor() {
+      return isAuthenticated() &&
+        request.auth.token.email_verified == true &&
+        request.auth.token.email is string &&
+        exists(/databases/$(database)/documents/editorInvites/$(request.auth.token.email.lower()));
+    }
+
+    function isAdmin() {
+      return isBootstrapAdmin() ||
+        isInvitedEditor() ||
+        (isAuthenticated() &&
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    function isValidId(id) {
+      return id is string &&
+        id.size() >= 1 &&
+        id.size() <= 128 &&
+        id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmailDocId(id) {
+      return id is string &&
+        id.size() >= 3 &&
+        id.size() <= 150 &&
+        !id.matches('.*/.*') &&
+        id.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$');
+    }
+
+    function isNonEmptyString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidOptionalString(data, field, maxLen) {
+      return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    // ===============================================================
+    // Entity Validators
+    // ===============================================================
+    function isValidNews(data, newsId) {
+      return data.keys().hasAll(['id', 'title', 'category', 'content', 'imageUrl', 'publishedAt', 'isFeatured']) &&
+        data.keys().hasOnly(['id', 'title', 'category', 'district', 'language', 'author', 'photoCaption', 'content', 'imageUrl', 'publishedAt', 'updatedAt', 'scheduledAt', 'isFeatured', 'isPublished', 'linkUrl']) &&
+        isValidId(newsId) &&
+        data.id == newsId &&
+        isNonEmptyString(data.title, 1, 300) &&
+        isNonEmptyString(data.category, 1, 80) &&
+        isNonEmptyString(data.content, 1, 40000) &&
+        isNonEmptyString(data.imageUrl, 1, 500000) &&
+        isNonEmptyString(data.publishedAt, 1, 64) &&
+        isValidOptionalString(data, 'updatedAt', 64) &&
+        isValidOptionalString(data, 'scheduledAt', 64) &&
+        isValidOptionalString(data, 'author', 100) &&
+        isValidOptionalString(data, 'photoCaption', 250) &&
+        data.isFeatured is bool &&
+        (!('isPublished' in data) || data.isPublished is bool) &&
+        isValidOptionalString(data, 'district', 80) &&
+        (!('language' in data) || data.language in ['hi', 'en']) &&
+        isValidOptionalString(data, 'linkUrl', 500);
+    }
+
+    function isValidArticleViewCreate(data, newsId) {
+      return data.keys().hasAll(['newsId', 'count', 'updatedAt']) &&
+        data.keys().hasOnly(['newsId', 'count', 'updatedAt']) &&
+        isValidId(newsId) &&
+        data.newsId == newsId &&
+        data.count == 1 &&
+        isNonEmptyString(data.updatedAt, 1, 64);
+    }
+
+    function isValidArticleViewUpdate(data, existingData, newsId) {
+      return data.keys().hasAll(['newsId', 'count', 'updatedAt']) &&
+        data.keys().hasOnly(['newsId', 'count', 'updatedAt']) &&
+        isValidId(newsId) &&
+        data.newsId == newsId &&
+        data.newsId == existingData.newsId &&
+        data.count is number &&
+        data.count == existingData.count + 1 &&
+        isNonEmptyString(data.updatedAt, 1, 64);
+    }
+
+    function isValidNewsTipCreate(data, tipId) {
+      return data.keys().hasAll(['id', 'reporterName', 'contact', 'district', 'headline', 'details', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'reporterName', 'contact', 'district', 'headline', 'details', 'photoDataUrl', 'status', 'createdAt']) &&
+        isValidId(tipId) &&
+        data.id == tipId &&
+        isNonEmptyString(data.reporterName, 1, 100) &&
+        isNonEmptyString(data.contact, 1, 100) &&
+        isNonEmptyString(data.district, 1, 80) &&
+        isNonEmptyString(data.headline, 1, 250) &&
+        isNonEmptyString(data.details, 1, 5000) &&
+        isValidOptionalString(data, 'photoDataUrl', 450000) &&
+        data.status == 'pending' &&
+        isNonEmptyString(data.createdAt, 1, 64);
+    }
+
+    function isValidNewsTipUpdate(data, existingData) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt']) &&
+        data.id == existingData.id &&
+        data.status in ['pending', 'reviewed', 'converted'] &&
+        isValidOptionalString(data, 'reviewedAt', 64);
+    }
+
+    function isValidSubscriberCreate(data, subId) {
+      return data.keys().hasAll(['id', 'email', 'subscribedAt']) &&
+        data.keys().hasOnly(['id', 'email', 'subscribedAt', 'source']) &&
+        isValidId(subId) &&
+        data.id == subId &&
+        isNonEmptyString(data.email, 3, 150) &&
+        data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$') &&
+        isNonEmptyString(data.subscribedAt, 1, 64) &&
+        isValidOptionalString(data, 'source', 40);
+    }
+
+    function isValidSponsorAd(data, adId) {
+      return data.keys().hasAll(['id', 'title', 'imageUrl', 'targetUrl', 'placement', 'enabled', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'title', 'imageUrl', 'targetUrl', 'placement', 'enabled', 'createdAt']) &&
+        isValidId(adId) &&
+        data.id == adId &&
+        isNonEmptyString(data.title, 1, 150) &&
+        isNonEmptyString(data.imageUrl, 1, 500000) &&
+        isNonEmptyString(data.targetUrl, 1, 500) &&
+        data.placement in ['home', 'article', 'epaper'] &&
+        data.enabled is bool &&
+        isNonEmptyString(data.createdAt, 1, 64);
+    }
+
+    function isValidInquiryCreate(data, inquiryId) {
+      return data.keys().hasAll(['id', 'name', 'contact', 'subject', 'message', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'name', 'contact', 'subject', 'message', 'status', 'createdAt']) &&
+        isValidId(inquiryId) &&
+        data.id == inquiryId &&
+        isNonEmptyString(data.name, 1, 100) &&
+        isNonEmptyString(data.contact, 1, 150) &&
+        data.subject in ['Editorial / Correction', 'Advertisement', 'General'] &&
+        isNonEmptyString(data.message, 1, 3000) &&
+        data.status == 'new' &&
+        isNonEmptyString(data.createdAt, 1, 64);
+    }
+
+    function isValidInquiryUpdate(data, existingData) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resolvedAt']) &&
+        data.id == existingData.id &&
+        data.status in ['new', 'resolved'] &&
+        isValidOptionalString(data, 'resolvedAt', 64);
+    }
+
+    function isValidPushToken(data, tokenId) {
+      return data.keys().hasAll(['id', 'token', 'region', 'epaperEnabled', 'breakingEnabled', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'token', 'region', 'epaperEnabled', 'breakingEnabled', 'createdAt', 'updatedAt']) &&
+        isValidId(tokenId) &&
+        data.id == tokenId &&
+        isNonEmptyString(data.token, 4, 500) &&
+        isNonEmptyString(data.region, 1, 80) &&
+        data.epaperEnabled is bool &&
+        data.breakingEnabled is bool &&
+        isNonEmptyString(data.createdAt, 1, 64) &&
+        isNonEmptyString(data.updatedAt, 1, 64);
+    }
+
+    function isValidEditorInvite(data, inviteId) {
+      return data.keys().hasAll(['email', 'name', 'role', 'addedBy', 'addedAt']) &&
+        data.keys().hasOnly(['email', 'name', 'role', 'addedBy', 'addedAt']) &&
+        isValidEmailDocId(inviteId) &&
+        data.email == inviteId &&
+        data.email == data.email.lower() &&
+        isNonEmptyString(data.name, 1, 100) &&
+        data.role in ['editor', 'admin'] &&
+        isNonEmptyString(data.addedBy, 3, 150) &&
+        isNonEmptyString(data.addedAt, 1, 64);
+    }
+
+    function isValidCategory(data, categoryId) {
+      return data.keys().hasAll(['id', 'name']) &&
+        data.keys().hasOnly(['id', 'name', 'enabled', 'order']) &&
+        isValidId(categoryId) &&
+        data.id == categoryId &&
+        isNonEmptyString(data.name, 1, 80) &&
+        (!('enabled' in data) || data.enabled is bool) &&
+        (!('order' in data) || data.order is number);
+    }
+
+    function isValidNewspaper(data, paperId) {
+      return data.keys().hasAll(['id', 'date', 'title', 'pdfUrl']) &&
+        data.keys().hasOnly(['id', 'date', 'title', 'pdfUrl', 'pageCount', 'fileSize']) &&
+        isValidId(paperId) &&
+        data.id == paperId &&
+        isNonEmptyString(data.date, 4, 32) &&
+        isNonEmptyString(data.title, 1, 250) &&
+        isNonEmptyString(data.pdfUrl, 1, 1000) &&
+        (!('pageCount' in data) || (data.pageCount is number && data.pageCount >= 1 && data.pageCount <= 200)) &&
+        (!('fileSize' in data) || (data.fileSize is number && data.fileSize >= 0));
+    }
+
+    function isValidPdfChunk(data) {
+      return data.keys().hasAll(['index', 'totalChunks', 'data']) &&
+        data.keys().hasOnly(['index', 'totalChunks', 'data']) &&
+        data.index is number && data.index >= 0 && data.index < 50 &&
+        data.totalChunks is number && data.totalChunks >= 1 && data.totalChunks <= 50 &&
+        isNonEmptyString(data.data, 1, 900000);
+    }
+
+    function isValidBreakingNews(data, itemId) {
+      return data.keys().hasAll(['id', 'text', 'enabled']) &&
+        data.keys().hasOnly(['id', 'text', 'enabled']) &&
+        isValidId(itemId) &&
+        data.id == itemId &&
+        isNonEmptyString(data.text, 1, 400) &&
+        data.enabled is bool;
+    }
+
+    function isValidVideo(data, videoId) {
+      return data.keys().hasAll(['id', 'title', 'category', 'youtubeId', 'publishedAt']) &&
+        data.keys().hasOnly(['id', 'title', 'category', 'youtubeId', 'publishedAt']) &&
+        isValidId(videoId) &&
+        data.id == videoId &&
+        isNonEmptyString(data.title, 1, 250) &&
+        isNonEmptyString(data.category, 1, 80) &&
+        isNonEmptyString(data.youtubeId, 1, 40) &&
+        isNonEmptyString(data.publishedAt, 1, 64);
+    }
+
+    function isValidSiteSettings(data) {
+      return data.keys().hasAll(['siteName', 'tagline', 'logoUrl', 'contactEmail', 'contactPhone', 'aboutText', 'tickerEnabled']) &&
+        data.keys().hasOnly(['siteName', 'tagline', 'logoUrl', 'contactEmail', 'contactPhone', 'aboutText', 'tickerEnabled']) &&
+        isNonEmptyString(data.siteName, 1, 120) &&
+        isNonEmptyString(data.tagline, 0, 200) &&
+        isNonEmptyString(data.logoUrl, 1, 400000) &&
+        isNonEmptyString(data.contactEmail, 0, 150) &&
+        isNonEmptyString(data.contactPhone, 0, 60) &&
+        isNonEmptyString(data.aboutText, 0, 5000) &&
+        data.tickerEnabled is bool;
+    }
+
+    function isValidSocialLink(data, linkId) {
+      return data.keys().hasAll(['id', 'platform', 'url', 'enabled']) &&
+        data.keys().hasOnly(['id', 'platform', 'url', 'enabled']) &&
+        isValidId(linkId) &&
+        data.id == linkId &&
+        isNonEmptyString(data.platform, 1, 60) &&
+        isNonEmptyString(data.url, 1, 500) &&
+        data.enabled is bool;
+    }
+
+    function isValidCommentCreate(data, commentId) {
+      return data.keys().hasAll(['id', 'newsId', 'author', 'content', 'createdAt', 'status']) &&
+        data.keys().hasOnly(['id', 'newsId', 'author', 'content', 'createdAt', 'status', 'uid']) &&
+        isValidId(commentId) &&
+        data.id == commentId &&
+        isValidId(data.newsId) &&
+        isNonEmptyString(data.author, 1, 80) &&
+        isNonEmptyString(data.content, 1, 1500) &&
+        isNonEmptyString(data.createdAt, 1, 64) &&
+        data.status == 'approved' &&
+        (!('uid' in data) || (isAuthenticated() && data.uid == request.auth.uid));
+    }
+
+    function isValidCommentUpdate(data) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'content']) &&
+        data.status in ['approved', 'pending', 'hidden'] &&
+        isNonEmptyString(data.content, 1, 1500);
+    }
+
+    function isValidPrivateProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'name']) &&
+        data.keys().hasOnly(['uid', 'name', 'contact', 'email', 'photo', 'updatedAt']) &&
+        data.uid == userId &&
+        isNonEmptyString(data.name, 1, 100) &&
+        isValidOptionalString(data, 'contact', 40) &&
+        isValidOptionalString(data, 'email', 150) &&
+        isValidOptionalString(data, 'photo', 350000) &&
+        isValidOptionalString(data, 'updatedAt', 64);
+    }
+
+    function isValidBookmark(data, newsId) {
+      return data.keys().hasAll(['newsId', 'title', 'category', 'imageUrl', 'publishedAt', 'savedAt']) &&
+        data.keys().hasOnly(['newsId', 'title', 'category', 'imageUrl', 'publishedAt', 'savedAt']) &&
+        data.newsId == newsId &&
+        isNonEmptyString(data.title, 1, 300) &&
+        isNonEmptyString(data.category, 1, 80) &&
+        isNonEmptyString(data.imageUrl, 1, 500000) &&
+        isNonEmptyString(data.publishedAt, 1, 64) &&
+        isNonEmptyString(data.savedAt, 1, 64);
+    }
+
+    function isValidAdminRecord(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+        data.keys().hasOnly(['uid', 'email', 'role', 'addedAt']) &&
+        data.uid == userId &&
+        isNonEmptyString(data.email, 3, 150) &&
+        data.role == 'admin' &&
+        isValidOptionalString(data, 'addedAt', 64);
+    }
+
+    function isValidActivity(data, activityId) {
+      return data.keys().hasAll(['id', 'action', 'timestamp']) &&
+        data.keys().hasOnly(['id', 'action', 'timestamp']) &&
+        isValidId(activityId) &&
+        data.id == activityId &&
+        isNonEmptyString(data.action, 1, 300) &&
+        isNonEmptyString(data.timestamp, 1, 64);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+    match /news/{newsId} {
+      allow read: if (resource == null || resource.data.isPublished != false) || isAdmin();
+      allow create, update: if isAdmin() && isValidNews(request.resource.data, newsId);
+      allow delete: if isAdmin();
+    }
+
+    match /articleViews/{newsId} {
+      allow read: if true;
+      allow create: if isValidArticleViewCreate(request.resource.data, newsId);
+      allow update: if resource != null && isValidArticleViewUpdate(request.resource.data, resource.data, newsId);
+      allow delete: if isAdmin();
+    }
+
+    match /newsTips/{tipId} {
+      allow create: if isValidNewsTipCreate(request.resource.data, tipId);
+      allow read: if isAdmin();
+      allow update: if isAdmin() && resource != null && isValidNewsTipUpdate(request.resource.data, resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /subscribers/{subId} {
+      allow create: if isValidSubscriberCreate(request.resource.data, subId);
+      allow read, delete: if isAdmin();
+      allow update: if false;
+    }
+
+    match /ads/{adId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSponsorAd(request.resource.data, adId);
+      allow delete: if isAdmin();
+    }
+
+    match /inquiries/{inquiryId} {
+      allow create: if isValidInquiryCreate(request.resource.data, inquiryId);
+      allow read: if isAdmin();
+      allow update: if isAdmin() && resource != null && isValidInquiryUpdate(request.resource.data, resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /pushTokens/{tokenId} {
+      allow create, update: if isValidPushToken(request.resource.data, tokenId);
+      allow read, delete: if isAdmin();
+    }
+
+    match /editorInvites/{inviteId} {
+      allow get: if isBootstrapAdmin() ||
+        (isAuthenticated() &&
+          request.auth.token.email_verified == true &&
+          request.auth.token.email is string &&
+          inviteId == request.auth.token.email.lower());
+      allow list: if isBootstrapAdmin();
+      allow create, update: if isBootstrapAdmin() && isValidEditorInvite(request.resource.data, inviteId);
+      allow delete: if isBootstrapAdmin();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidCategory(request.resource.data, categoryId);
+      allow delete: if isAdmin();
+    }
+
+    match /newspapers/{paperId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidNewspaper(request.resource.data, paperId);
+      allow delete: if isAdmin();
+
+      match /chunks/{chunkId} {
+        allow read: if true;
+        allow create, update: if isAdmin() && isValidPdfChunk(request.resource.data);
+        allow delete: if isAdmin();
+      }
+    }
+
+    match /breakingNews/{itemId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidBreakingNews(request.resource.data, itemId);
+      allow delete: if isAdmin();
+    }
+
+    match /videos/{videoId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidVideo(request.resource.data, videoId);
+      allow delete: if isAdmin();
+    }
+
+    match /siteConfig/{docId} {
+      allow read: if true;
+      allow create, update: if docId == 'general' && isAdmin() && isValidSiteSettings(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /socialLinks/{linkId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSocialLink(request.resource.data, linkId);
+      allow delete: if isAdmin();
+    }
+
+    match /comments/{commentId} {
+      allow read: if (resource == null || resource.data.status != 'hidden') || isAdmin();
+      allow create: if isValidCommentCreate(request.resource.data, commentId);
+      allow update: if isAdmin() && isValidCommentUpdate(request.resource.data);
+      allow delete: if isAdmin() || (isAuthenticated() && resource != null && resource.data.uid == request.auth.uid);
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /private/{docId} {
+        allow read: if isOwner(userId);
+        allow create, update: if docId == 'profile' && isOwner(userId) && isValidPrivateProfile(request.resource.data, userId);
+        allow delete: if isOwner(userId);
+      }
+
+      match /bookmarks/{newsId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidBookmark(request.resource.data, newsId);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    match /admins/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if isBootstrapAdmin() && isValidAdminRecord(request.resource.data, userId);
+      allow delete: if isBootstrapAdmin();
+    }
+
+    match /adminActivity/{activityId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && isValidActivity(request.resource.data, activityId);
+      allow delete: if isAdmin();
+    }
+
+    // Default deny for everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
